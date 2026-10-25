@@ -1,0 +1,65 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+
+start() {
+    (
+        sta_section=""
+        ap_section=""
+
+        for s in $(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+            mode="$(uci -q get wireless.$s.mode)"
+            if [ "$mode" = "sta" ] && [ -z "$sta_section" ]; then
+                sta_section="$s"
+            elif [ "$mode" = "ap" ] && [ -z "$ap_section" ]; then
+                ap_section="$s"
+            fi
+        done
+
+        [ -z "$sta_section" ] && exit 0
+        [ -z "$ap_section" ] && exit 0
+
+        sta_ifname="$(iw dev 2>/dev/null | awk '/Interface/{name=$2} /type managed/{print name; exit}')"
+        [ -z "$sta_ifname" ] && sta_ifname="phy0-sta0"
+
+        uci set wireless.$sta_section.disabled='0'
+        uci commit wireless
+
+        i=0
+        while [ $i -lt 10 ]; do
+            iw dev 2>/dev/null | grep -q "$sta_ifname" && break
+            sleep 1
+            i=$((i + 1))
+        done
+
+        uci set wireless.$ap_section.disabled='1'
+        uci commit wireless
+        wifi reload
+
+        i=0
+        while [ $i -lt 10 ]; do
+            if iw dev "$sta_ifname" link 2>/dev/null | grep -q "Connected"; then
+                break
+            fi
+            sleep 2
+            i=$((i + 1))
+        done
+
+        if iw dev "$sta_ifname" link 2>/dev/null | grep -q "Connected"; then
+            logger -t sta_wifi "STA connected"
+            uci set wireless.$ap_section.disabled='0'
+            uci commit wireless
+            wifi reload
+        else
+            logger -t sta_wifi "STA failed, AP standalone"
+            uci set wireless.$sta_section.disabled='1'
+            uci set wireless.$ap_section.disabled='0'
+            uci commit wireless
+            wifi reload
+        fi
+    ) &
+}
+
+stop() {
+    :
+}

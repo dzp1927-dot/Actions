@@ -3,4 +3,6 @@ chmod +x /etc/init.d/auto-apn
 /etc/init.d/auto-apn enable
 chmod +x /etc/init.d/swapfile
 /etc/init.d/swapfile enable
+chmod +x /etc/init.d/sta_wifi
+/etc/init.d/sta_wifi enable
 exit 0
