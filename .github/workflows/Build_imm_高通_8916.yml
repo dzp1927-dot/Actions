@@ -17,9 +17,8 @@ on:
         default: false
         type: boolean
 
-
 env:
-  ALL_DEVICES: "jz02v10 ufi001c ufi001b ufi103s qrzl903 w001 ufi003 uz801 mf32 mf601 wf2 sp970v11 sp970v10"
+  ALL_DEVICES: "ufi003"
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
@@ -35,39 +34,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
        contents: write
-       
+
     strategy:
       fail-fast: false
       matrix:
         device:
-          - jz02v10
-          - ufi001c
-          - ufi001b
-          - ufi103s
-          - qrzl903
-          - w001
           - ufi003
-          - uz801
-          - mf32
-          - mf601
-          - wf2
-          - sp970v11
-          - sp970v10
+
     steps:
-   
     - name: Checkout
       uses: actions/checkout@main
-      
+
     - name: 记录当前编译型号
       run: |
         echo "CONFIG_FILE=config/${{ matrix.device }}.config" >> $GITHUB_ENV
-
 
     - name: Show hardware info
       run: |
         chmod 755 ./scripts/show_hardware_info.sh
         ./scripts/show_hardware_info.sh
-  
+
     - name: Free Disk Space (Ubuntu)
       uses: insightsengineering/disk-space-reclaimer@v1.1.2
       with:
@@ -78,7 +64,7 @@ jobs:
         swap-storage: false
         docker-images: false
         tools-cache: true
-        
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -99,10 +85,10 @@ jobs:
         cd downloads
 
         if [ ! -f mkbootimg_34.0.5-12build1_all.deb ]; then
-          echo "📥 mkbootimg deb not cached, downloading..."
+          echo "[表情] mkbootimg deb not cached, downloading..."
           wget https://github.com/xuxin1955/depend_ubuntu2204_openwrt/releases/download/ubuntu_26.04_LTS_mkbootimg/mkbootimg_34.0.5-12build1_all.deb
         else
-          echo "✅ mkbootimg deb restored from cache"
+          echo "[表情] mkbootimg deb restored from cache"
         fi
 
         sudo dpkg -i mkbootimg_34.0.5-12build1_all.deb || true
@@ -112,24 +98,20 @@ jobs:
 
         MKBOOTIMG_PATH=$(which mkbootimg)
         if [ -n "$MKBOOTIMG_PATH" ]; then
-          echo "✅ mkbootimg found at: $MKBOOTIMG_PATH"
+          echo "[表情] mkbootimg found at: $MKBOOTIMG_PATH"
           file "$MKBOOTIMG_PATH"
         else
-          echo "❌ mkbootimg not found in PATH!"
+          echo "[表情] mkbootimg not found in PATH!"
         fi
 
         sudo timedatectl set-timezone "$TZ"
         sudo chmod 777 /mnt
         df -hT
 
-
-        
     - name: Ensure Python build tools
       run: |
         python3 -m pip install --upgrade pip setuptools wheel
         python3 -m pip install Unidecode
-
-
 
     - name: Clone source code
       working-directory: /mnt
@@ -146,27 +128,26 @@ jobs:
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-        
-     
+
     - name: Update feeds
       run: |
         cd openwrt
         ./scripts/feeds update -a
-        
-        echo "📌 Local packages feed:"
+
+        echo "[表情] Local packages feed:"
         git -C feeds/packages log -1 --format="%H %ci %s"
 
-        echo "📌 Actual remote of feeds/packages:"
+        echo "[表情] Actual remote of feeds/packages:"
         git -C feeds/packages remote get-url origin
 
-        echo "📌 Remote HEAD actually used:"
+        echo "[表情] Remote HEAD actually used:"
         git -C feeds/packages ls-remote HEAD || true
 
     - name: Install feeds
       run: |
         cd openwrt
         ./scripts/feeds install -a -f
-        
+
     - name: remove warning
       run: |
         chmod 755 $GITHUB_WORKSPACE/scripts/diy-part.sh
@@ -178,18 +159,16 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-        
-        
+
     - name: SSH 调试有效时间6h! 连接后输入q 输入exit即可退出，自动继续后续编译流程
       uses: WarpBuilds/action-debugger@master
       if: ${{ inputs.ssh || contains(github.event.action, 'ssh') }}
-      
-      
+
     - name: make defconfig
       run: |
         cd openwrt
         make defconfig V=s
-        
+
     - name: Cache ccache
       uses: actions/cache@v5
       with:
@@ -214,16 +193,14 @@ jobs:
        ccache -o compiler_check=content
        ccache -o sloppiness=file_stat_matches,include_file_ctime,include_file_mtime,time_macros,pch_defines
        ccache -p | grep -E "max_size|cache_dir"
- 
-             
+
     - name: 查看 openwrt 目录
       run: ls -la openwrt/
-      
+
            ls -l .config
-      
+
            ls -la openwrt/.config
 
- 
     - name: 自动上传最新源码生成.config编译配置
       uses: actions/upload-artifact@main
       with:
@@ -232,7 +209,7 @@ jobs:
          ${{ github.workspace }}/openwrt/.config
          ${{ github.workspace }}/openwrt/feeds.conf.default
        include-hidden-files: true
-       
+
     - name: Cache dl
       id: cache-dl
       uses: actions/cache@v5
@@ -254,22 +231,20 @@ jobs:
           echo "$output" | grep -iE "Hash verification failed|checksum mismatch|ERROR"
         fi
       shell: bash
-      
-      
+
     - name: 补丁应用预检
       run: |
          cd openwrt
          bash $GITHUB_WORKSPACE/check-patches.sh
 
-    
     - name: make -j$(nproc)
       id: compile
       run: |
         cd openwrt
-        
+
         echo "===== ccache BEFORE ====="
         ccache --show-stats
-        
+
         echo -e "$(nproc) thread compile"
 
         set +e
@@ -278,15 +253,15 @@ jobs:
         set -e
 
         if [ $BUILD_EXIT -ne 0 ]; then
-          echo "⚠️ 并行编译失败，切换到详细模式..."
+          echo "[表情] 并行编译失败，切换到详细模式..."
           set +e
           make -j8 V=s
           VERBOSE_EXIT=$?
           set -e
           [ $VERBOSE_EXIT -ne 0 ] && exit $VERBOSE_EXIT
-          echo "✅ 详细模式编译成功"
+          echo "[表情] 详细模式编译成功"
         else
-          echo "✅ 并行编译成功"
+          echo "[表情] 并行编译成功"
         fi
 
         echo "status=success" >> $GITHUB_OUTPUT
@@ -314,7 +289,7 @@ jobs:
         rm -rf packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-        
+
     - name: Prefix common
       if: steps.organize.outputs.status == 'success'
       run: |
@@ -344,7 +319,7 @@ jobs:
         echo "release_name=MSM8916-$(date +%Y.%m.%d-%H%M)" >> $GITHUB_OUTPUT
         touch release.txt
         if [ "${UPLOAD_GOFILE}" = "true" ] && [ -n "${{ steps.gofile.outputs.url }}" ]; then
-          echo "🔗 GoFile" >> release.txt
+          echo "[表情] GoFile" >> release.txt
         fi
         echo "" >> release.txt
         {
@@ -364,7 +339,6 @@ jobs:
         } >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
- 
     - name: Generate file list
       if: env.UPLOAD_RELEASE == 'true' && steps.organize.outputs.status == 'success'
       run: |
@@ -372,8 +346,6 @@ jobs:
         echo "Collected files:"
         cat file_list.txt
         test -s file_list.txt || { echo "::error::No firmware files found"; exit 1; }
-
-
 
     - name: Upload firmware to release
       if: env.UPLOAD_RELEASE == 'true' && steps.organize.outputs.status == 'success'
@@ -389,7 +361,6 @@ jobs:
         allowUpdates: true
         draft: false
         prerelease: false
-
 
     - name: Delete old workflow runs via GitHub API
       if: always()
@@ -419,4 +390,3 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id"
           done
         fi
-        
